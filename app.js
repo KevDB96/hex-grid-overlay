@@ -30,6 +30,7 @@
   let dragStart = null;
   let resizeStart = null;
   let loadGeneration = 0;
+  let drawFrame = 0;
 
   function readPreferences() {
     try {
@@ -138,6 +139,7 @@
 
   canvas.addEventListener('pointerup', finishDrag);
   canvas.addEventListener('pointercancel', finishDrag);
+  canvas.addEventListener('lostpointercapture', finishDrag);
 
   resizeHandle.addEventListener('pointerdown', (event) => {
     if (!state.image || (event.pointerType === 'mouse' && event.button !== 0)) return;
@@ -170,6 +172,7 @@
 
   resizeHandle.addEventListener('pointerup', finishResize);
   resizeHandle.addEventListener('pointercancel', finishResize);
+  resizeHandle.addEventListener('lostpointercapture', finishResize);
 
   function drawGrid(targetContext, width, height) {
     targetContext.save();
@@ -178,12 +181,12 @@
     const spacing = Math.max(state.hexSize, Math.sqrt(width * height / (maxCells * densityFactor)) * 1.15);
     const stepX = pointy ? Math.sqrt(3) * spacing : 1.5 * spacing;
     const stepY = pointy ? 1.5 * spacing : Math.sqrt(3) * spacing;
-    const marginX = pointy ? stepX * 3 : spacing * 2;
-    const marginY = pointy ? spacing * 2 : stepY * 3;
-    const colStart = Math.floor((-marginX - state.offsetX) / stepX) - 3;
-    const colEnd = Math.ceil((width + marginX - state.offsetX) / stepX) + 3;
-    const rowStart = Math.floor((-marginY - state.offsetY) / stepY) - 3;
-    const rowEnd = Math.ceil((height + marginY - state.offsetY) / stepY) + 3;
+    const marginX = spacing * 2;
+    const marginY = spacing * 2;
+    const colStart = Math.floor((-marginX - state.offsetX) / stepX) - 1;
+    const colEnd = Math.ceil((width + marginX - state.offsetX) / stepX) + 1;
+    const rowStart = Math.floor((-marginY - state.offsetY) / stepY) - 1;
+    const rowEnd = Math.ceil((height + marginY - state.offsetY) / stepY) + 1;
 
     const edges = new Map();
     const vertexAt = (cx, cy, vertex) => {
@@ -222,18 +225,65 @@
     return spacing;
   }
 
-  function draw() {
+  function drawNow() {
     if (!state.image) return;
     const width = state.image.naturalWidth;
     const height = state.image.naturalHeight;
-    canvas.width = width;
-    canvas.height = height;
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
     context.clearRect(0, 0, width, height);
     context.drawImage(state.image, 0, 0);
     const spacing = drawGrid(context, width, height);
     appMessage.textContent = spacing > state.hexSize ? 'Ready · grid detail limited for image size' : 'Ready';
     positionResizeHandle();
   }
+
+  function draw() {
+    if (drawFrame) return;
+    drawFrame = window.requestAnimationFrame(() => {
+      drawFrame = 0;
+      drawNow();
+    });
+  }
+
+  function resetGrid() {
+    state.offsetX = 0;
+    state.offsetY = 0;
+    state.gridColor = '#ffffff';
+    state.gridOpacity = 0.8;
+    state.lineWidth = 2;
+    state.orientation = 'pointy';
+    state.hexSize = defaultHexSize(state.image);
+    syncControlsFromState();
+    savePreferences();
+    draw();
+  }
+
+  function isFormFocus(target) {
+    return target instanceof Element && !!target.closest('input, select, textarea, button, [contenteditable="true"], [role="textbox"]');
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || isFormFocus(event.target)) return;
+    let handled = true;
+    const step = event.shiftKey ? 10 : 1;
+    if (event.key === 'ArrowLeft') state.offsetX -= step;
+    else if (event.key === 'ArrowRight') state.offsetX += step;
+    else if (event.key === 'ArrowUp') state.offsetY -= step;
+    else if (event.key === 'ArrowDown') state.offsetY += step;
+    else if (event.key === '+' || event.key === '=') applyHexSize(state.hexSize + Math.max(0.5, state.hexSize * 0.025));
+    else if (event.key === '-' || event.key === '_') applyHexSize(state.hexSize - Math.max(0.5, state.hexSize * 0.025));
+    else if (event.key.toLowerCase() === 'r') resetGrid();
+    else handled = false;
+    if (!handled) return;
+    event.preventDefault();
+    if (event.key.startsWith('Arrow')) {
+      controls.offsetX.value = String(state.offsetX);
+      controls.offsetY.value = String(state.offsetY);
+      savePreferences();
+      draw();
+    }
+  });
 
   function reportExportError(error) {
     appMessage.textContent = 'The PNG could not be exported. Please try again.';
@@ -300,16 +350,7 @@
   });
 
   resetButton.addEventListener('click', () => {
-    state.offsetX = 0;
-    state.offsetY = 0;
-    state.gridColor = '#ffffff';
-    state.gridOpacity = 0.8;
-    state.lineWidth = 2;
-    state.orientation = 'pointy';
-    state.hexSize = defaultHexSize(state.image);
-    syncControlsFromState();
-    savePreferences();
-    draw();
+    resetGrid();
   });
 
   function loadPng(file) {
