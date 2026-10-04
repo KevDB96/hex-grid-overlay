@@ -5,6 +5,7 @@
   const dropZone = document.getElementById('drop-zone');
   const canvas = document.getElementById('workspace-canvas');
   const resizeHandle = document.getElementById('resize-handle');
+  const resetButton = document.getElementById('reset-grid');
   const context = canvas.getContext('2d');
   const opacityValue = document.getElementById('opacity-value');
   const lineWidthValue = document.getElementById('line-width-value');
@@ -21,10 +22,59 @@
     image: null, filename: '', hexSize: 40, offsetX: 0, offsetY: 0,
     gridColor: '#ffffff', gridOpacity: 0.8, lineWidth: 2, orientation: 'pointy'
   };
+  const preferenceKey = 'hex-grid-overlay.preferences.v1';
   const maxCells = 100000;
   let activePointerId = null;
   let dragStart = null;
   let resizeStart = null;
+
+  function readPreferences() {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(preferenceKey) || 'null');
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+      if (typeof saved.gridColor === 'string' && /^#[0-9a-f]{6}$/i.test(saved.gridColor)) state.gridColor = saved.gridColor;
+      if (Number.isFinite(saved.gridOpacity) && saved.gridOpacity >= 0 && saved.gridOpacity <= 1) state.gridOpacity = saved.gridOpacity;
+      if (Number.isFinite(saved.lineWidth) && saved.lineWidth >= 0.5 && saved.lineWidth <= 10) state.lineWidth = saved.lineWidth;
+      if (saved.orientation === 'pointy' || saved.orientation === 'flat') state.orientation = saved.orientation;
+      if (Number.isFinite(saved.hexSize) && saved.hexSize >= 5 && saved.hexSize <= 1000) state.hexSize = saved.hexSize;
+    } catch (_) {
+      // Storage may be unavailable or contain invalid JSON; use the defaults.
+    }
+  }
+
+  function savePreferences() {
+    try {
+      window.localStorage.setItem(preferenceKey, JSON.stringify({
+        gridColor: state.gridColor,
+        gridOpacity: state.gridOpacity,
+        lineWidth: state.lineWidth,
+        orientation: state.orientation,
+        hexSize: state.hexSize
+      }));
+    } catch (_) {
+      // Storage is optional; the editor continues with in-memory settings.
+    }
+  }
+
+  function syncControlsFromState() {
+    controls.hexSize.value = String(state.hexSize);
+    controls.offsetX.value = String(state.offsetX);
+    controls.offsetY.value = String(state.offsetY);
+    controls.gridColor.value = state.gridColor;
+    controls.gridOpacity.value = String(Math.round(state.gridOpacity * 100));
+    controls.lineWidth.value = String(state.lineWidth);
+    controls.orientation.value = state.orientation;
+    opacityValue.value = `${Math.round(state.gridOpacity * 100)}%`;
+    lineWidthValue.value = `${state.lineWidth} px`;
+  }
+
+  function defaultHexSize(image) {
+    if (!image) return 40;
+    return Math.min(1000, Math.max(5, Math.sqrt(image.naturalWidth * image.naturalHeight) / 40));
+  }
+
+  readPreferences();
+  syncControlsFromState();
 
   function canvasPoint(event) {
     const bounds = canvas.getBoundingClientRect();
@@ -53,6 +103,7 @@
   function applyHexSize(value) {
     state.hexSize = Math.min(1000, Math.max(5, Number(value)));
     controls.hexSize.value = String(Number(state.hexSize.toFixed(2)));
+    savePreferences();
     draw();
   }
 
@@ -72,6 +123,7 @@
     state.offsetY = dragStart.offsetY + point.y - dragStart.pointerY;
     controls.offsetX.value = String(state.offsetX);
     controls.offsetY.value = String(state.offsetY);
+    savePreferences();
     draw();
   });
 
@@ -187,6 +239,7 @@
     opacityValue.value = `${Math.round(state.gridOpacity * 100)}%`;
     lineWidthValue.value = `${state.lineWidth} px`;
     state.orientation = controls.orientation.value === 'flat' ? 'flat' : 'pointy';
+    savePreferences();
   }
 
   Object.values(controls).forEach((control) => control.addEventListener('input', () => {
@@ -196,6 +249,19 @@
 
   controls.hexSize.addEventListener('change', () => {
     setStateFromControls();
+    draw();
+  });
+
+  resetButton.addEventListener('click', () => {
+    state.offsetX = 0;
+    state.offsetY = 0;
+    state.gridColor = '#ffffff';
+    state.gridOpacity = 0.8;
+    state.lineWidth = 2;
+    state.orientation = 'pointy';
+    state.hexSize = defaultHexSize(state.image);
+    syncControlsFromState();
+    savePreferences();
     draw();
   });
 
@@ -220,6 +286,10 @@
       URL.revokeObjectURL(objectUrl);
       state.image = image;
       state.filename = file.name;
+      state.offsetX = 0;
+      state.offsetY = 0;
+      controls.offsetX.value = '0';
+      controls.offsetY.value = '0';
       setStateFromControls();
       canvas.style.display = 'block';
       dropZone.classList.add('has-image');
