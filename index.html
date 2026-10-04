@@ -15,10 +15,17 @@
       <p class="privacy-note">Your images stay in this browser.</p>
     </header>
 
-    <section class="toolbar" aria-label="Image controls">
+    <section class="toolbar" aria-label="Image and grid controls">
       <label class="upload-button" for="image-file">Open PNG</label>
       <input id="image-file" class="visually-hidden" type="file" accept="image/png">
       <span id="file-status" class="file-status" role="status" aria-live="polite">No image selected</span>
+      <label>Hex size <input id="hex-size" type="number" min="4" max="1000" step="1" value="40"></label>
+      <label>Offset X <input id="offset-x" type="number" step="1" value="0"></label>
+      <label>Offset Y <input id="offset-y" type="number" step="1" value="0"></label>
+      <label>Color <input id="grid-color" type="color" value="#ffffff"></label>
+      <label>Opacity <input id="grid-opacity" type="number" min="0" max="1" step="0.05" value="0.8"></label>
+      <label>Line width <input id="line-width" type="number" min="0.25" max="20" step="0.25" value="2"></label>
+      <label>Orientation <select id="orientation"><option value="pointy">Pointy top</option><option value="flat">Flat top</option></select></label>
     </section>
 
     <section class="workspace" aria-label="Image workspace">
