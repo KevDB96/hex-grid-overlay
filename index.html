@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17191c">
+  <title>Hex Grid Overlay</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <h1>Hex Grid Overlay</h1>
+      <p class="privacy-note">Your images stay in this browser.</p>
+    </header>
+
+    <section class="toolbar" aria-label="Image controls">
+      <label class="upload-button" for="image-file">Open PNG</label>
+      <input id="image-file" class="visually-hidden" type="file" accept="image/png">
+      <span id="file-status" class="file-status" role="status" aria-live="polite">No image selected</span>
+    </section>
+
+    <section class="workspace" aria-label="Image workspace">
+      <div id="drop-zone" class="drop-zone" tabindex="0" aria-label="PNG drop area">
+        <div class="drop-content">
+          <span class="drop-mark" aria-hidden="true">＋</span>
+          <strong>Drop a PNG here</strong>
+          <span>or use Open PNG above</span>
+        </div>
+        <canvas id="workspace-canvas" aria-label="Image workspace canvas"></canvas>
+      </div>
+    </section>
+
+    <p id="app-message" class="app-message" role="status" aria-live="polite">Ready</p>
+  </main>
+</body>
+</html>
