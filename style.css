@@ -107,6 +107,9 @@ h1 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.65rem); letter-spacing: .01em; 
 .drop-mark { color: #87919d; font-size: 2rem; line-height: 1; }
 canvas { display: none; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; touch-action: none; cursor: grab; }
 .drop-zone.has-image canvas:active { cursor: grabbing; }
+.resize-handle { position: absolute; z-index: 2; width: 22px; height: 22px; padding: 0; transform: translate(-50%, -50%); border: 3px solid #17191c; border-radius: 50%; background: #ffd166; box-shadow: 0 0 0 2px #fff, 0 1px 8px #000; cursor: nwse-resize; touch-action: none; }
+.resize-handle[hidden] { display: none; }
+.resize-handle:focus-visible { outline: 3px solid #8ab4f8; outline-offset: 3px; }
 .drop-zone.has-image .drop-content { display: none; }
 .app-message { min-height: 1.25em; margin: 0; color: #89929d; font-size: .78rem; }
 

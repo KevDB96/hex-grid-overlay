@@ -4,6 +4,7 @@
   const appMessage = document.getElementById('app-message');
   const dropZone = document.getElementById('drop-zone');
   const canvas = document.getElementById('workspace-canvas');
+  const resizeHandle = document.getElementById('resize-handle');
   const context = canvas.getContext('2d');
   const opacityValue = document.getElementById('opacity-value');
   const lineWidthValue = document.getElementById('line-width-value');
@@ -23,6 +24,7 @@
   const maxCells = 100000;
   let activePointerId = null;
   let dragStart = null;
+  let resizeStart = null;
 
   function canvasPoint(event) {
     const bounds = canvas.getBoundingClientRect();
@@ -32,8 +34,30 @@
     };
   }
 
+  function resizeAnchor() {
+    return { x: state.offsetX, y: state.offsetY };
+  }
+
+  function positionResizeHandle() {
+    if (!state.image) return;
+    const canvasBounds = canvas.getBoundingClientRect();
+    const zoneBounds = dropZone.getBoundingClientRect();
+    const anchor = resizeAnchor();
+    const handleX = anchor.x + state.hexSize;
+    const handleY = anchor.y + state.hexSize;
+    resizeHandle.style.left = `${canvasBounds.left - zoneBounds.left + handleX * canvasBounds.width / canvas.width}px`;
+    resizeHandle.style.top = `${canvasBounds.top - zoneBounds.top + handleY * canvasBounds.height / canvas.height}px`;
+    resizeHandle.hidden = false;
+  }
+
+  function applyHexSize(value) {
+    state.hexSize = Math.min(1000, Math.max(5, Number(value)));
+    controls.hexSize.value = String(Number(state.hexSize.toFixed(2)));
+    draw();
+  }
+
   canvas.addEventListener('pointerdown', (event) => {
-    if (!state.image || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (!state.image || resizeStart || (event.pointerType === 'mouse' && event.button !== 0)) return;
     const point = canvasPoint(event);
     activePointerId = event.pointerId;
     dragStart = { pointerX: point.x, pointerY: point.y, offsetX: state.offsetX, offsetY: state.offsetY };
@@ -59,6 +83,38 @@
 
   canvas.addEventListener('pointerup', finishDrag);
   canvas.addEventListener('pointercancel', finishDrag);
+
+  resizeHandle.addEventListener('pointerdown', (event) => {
+    if (!state.image || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    const pointer = canvasPoint(event);
+    const anchor = resizeAnchor();
+    const dx = pointer.x - anchor.x;
+    const dy = pointer.y - anchor.y;
+    resizeStart = {
+      pointerId: event.pointerId,
+      anchor,
+      startingSize: state.hexSize,
+      startingDistance: Math.max(0.001, Math.hypot(dx, dy))
+    };
+    resizeHandle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  resizeHandle.addEventListener('pointermove', (event) => {
+    if (!resizeStart || event.pointerId !== resizeStart.pointerId) return;
+    const pointer = canvasPoint(event);
+    const distance = Math.hypot(pointer.x - resizeStart.anchor.x, pointer.y - resizeStart.anchor.y);
+    applyHexSize(resizeStart.startingSize * distance / resizeStart.startingDistance);
+  });
+
+  function finishResize(event) {
+    if (!resizeStart || event.pointerId !== resizeStart.pointerId) return;
+    resizeStart = null;
+  }
+
+  resizeHandle.addEventListener('pointerup', finishResize);
+  resizeHandle.addEventListener('pointercancel', finishResize);
 
   function draw() {
     if (!state.image) return;
@@ -116,11 +172,13 @@
     context.stroke();
     context.globalAlpha = 1;
     appMessage.textContent = spacing > state.hexSize ? 'Ready · grid detail limited for image size' : 'Ready';
+    positionResizeHandle();
   }
 
   function setStateFromControls() {
     const n = (key, fallback) => Number.isFinite(Number(controls[key].value)) ? Number(controls[key].value) : fallback;
-    state.hexSize = Math.min(1000, Math.max(4, n('hexSize', 40)));
+    state.hexSize = Math.min(1000, Math.max(5, n('hexSize', 40)));
+    controls.hexSize.value = String(Number(state.hexSize.toFixed(2)));
     state.offsetX = n('offsetX', 0);
     state.offsetY = n('offsetY', 0);
     state.gridColor = controls.gridColor.value;
@@ -135,6 +193,11 @@
     setStateFromControls();
     draw();
   }));
+
+  controls.hexSize.addEventListener('change', () => {
+    setStateFromControls();
+    draw();
+  });
 
   function loadPng(file) {
     if (!file) return;
@@ -158,9 +221,9 @@
       state.image = image;
       state.filename = file.name;
       setStateFromControls();
-      draw();
       canvas.style.display = 'block';
       dropZone.classList.add('has-image');
+      draw();
       fileStatus.textContent = `${state.filename} · ${image.naturalWidth} × ${image.naturalHeight}`;
     };
     image.onerror = () => { URL.revokeObjectURL(objectUrl); appMessage.textContent = 'Could not read this PNG.'; };
