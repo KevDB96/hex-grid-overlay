@@ -21,6 +21,44 @@
     gridColor: '#ffffff', gridOpacity: 0.8, lineWidth: 2, orientation: 'pointy'
   };
   const maxCells = 100000;
+  let activePointerId = null;
+  let dragStart = null;
+
+  function canvasPoint(event) {
+    const bounds = canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - bounds.left) * canvas.width / bounds.width,
+      y: (event.clientY - bounds.top) * canvas.height / bounds.height
+    };
+  }
+
+  canvas.addEventListener('pointerdown', (event) => {
+    if (!state.image || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    const point = canvasPoint(event);
+    activePointerId = event.pointerId;
+    dragStart = { pointerX: point.x, pointerY: point.y, offsetX: state.offsetX, offsetY: state.offsetY };
+    canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== activePointerId || !dragStart) return;
+    const point = canvasPoint(event);
+    state.offsetX = dragStart.offsetX + point.x - dragStart.pointerX;
+    state.offsetY = dragStart.offsetY + point.y - dragStart.pointerY;
+    controls.offsetX.value = String(state.offsetX);
+    controls.offsetY.value = String(state.offsetY);
+    draw();
+  });
+
+  function finishDrag(event) {
+    if (event.pointerId !== activePointerId) return;
+    activePointerId = null;
+    dragStart = null;
+  }
+
+  canvas.addEventListener('pointerup', finishDrag);
+  canvas.addEventListener('pointercancel', finishDrag);
 
   function draw() {
     if (!state.image) return;
