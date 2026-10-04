@@ -5,6 +5,8 @@
   const dropZone = document.getElementById('drop-zone');
   const canvas = document.getElementById('workspace-canvas');
   const context = canvas.getContext('2d');
+  const opacityValue = document.getElementById('opacity-value');
+  const lineWidthValue = document.getElementById('line-width-value');
   const controls = {
     hexSize: document.getElementById('hex-size'),
     offsetX: document.getElementById('offset-x'),
@@ -84,8 +86,10 @@
     state.offsetX = n('offsetX', 0);
     state.offsetY = n('offsetY', 0);
     state.gridColor = controls.gridColor.value;
-    state.gridOpacity = Math.min(1, Math.max(0, n('gridOpacity', 0.8)));
-    state.lineWidth = Math.min(20, Math.max(0.25, n('lineWidth', 2)));
+    state.gridOpacity = Math.min(100, Math.max(0, n('gridOpacity', 80))) / 100;
+    state.lineWidth = Math.min(10, Math.max(0.5, n('lineWidth', 2)));
+    opacityValue.value = `${Math.round(state.gridOpacity * 100)}%`;
+    lineWidthValue.value = `${state.lineWidth} px`;
     state.orientation = controls.orientation.value === 'flat' ? 'flat' : 'pointy';
   }
 
