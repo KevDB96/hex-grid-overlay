@@ -3,6 +3,7 @@
   const fileStatus = document.getElementById('file-status');
   const appMessage = document.getElementById('app-message');
   const dropZone = document.getElementById('drop-zone');
+  const uploadDropTarget = document.getElementById('upload-drop-target');
   const canvas = document.getElementById('workspace-canvas');
   const resizeHandle = document.getElementById('resize-handle');
   const resetButton = document.getElementById('reset-grid');
@@ -28,6 +29,7 @@
   let activePointerId = null;
   let dragStart = null;
   let resizeStart = null;
+  let loadGeneration = 0;
 
   function readPreferences() {
     try {
@@ -234,7 +236,7 @@
   }
 
   function reportExportError(error) {
-    appMessage.textContent = 'PNG export failed. Your image and grid are unchanged; try again.';
+    appMessage.textContent = 'The PNG could not be exported. Please try again.';
     window.dispatchEvent(new CustomEvent('hexgrid:export-error', { detail: { error } }));
   }
 
@@ -313,22 +315,37 @@
   function loadPng(file) {
     if (!file) return;
     if (file.type ? file.type !== 'image/png' : !/\.png$/i.test(file.name)) {
-      appMessage.textContent = 'Choose a PNG image.';
+      appMessage.textContent = 'Please select a PNG image.';
       return;
     }
+    const generation = ++loadGeneration;
     file.slice(0, 8).arrayBuffer().then((buffer) => {
+      if (generation !== loadGeneration) return;
       const signature = new Uint8Array(buffer);
       const isPng = [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => signature[index] === byte);
-      if (!isPng) { appMessage.textContent = 'Choose a PNG image.'; return; }
-      decodePng(file);
-    }).catch(() => { appMessage.textContent = 'Could not read this PNG.'; });
+      if (!isPng) { appMessage.textContent = 'Please select a PNG image.'; return; }
+      decodePng(file, generation);
+    }).catch(() => {
+      if (generation === loadGeneration) appMessage.textContent = 'The image could not be opened.';
+    });
   }
 
-  function decodePng(file) {
+  function decodePng(file, generation) {
     const image = new Image();
-    const objectUrl = URL.createObjectURL(file);
+    let objectUrl;
+    try {
+      objectUrl = URL.createObjectURL(file);
+    } catch (_) {
+      appMessage.textContent = 'The image could not be opened.';
+      return;
+    }
     image.onload = () => {
       URL.revokeObjectURL(objectUrl);
+      if (generation !== loadGeneration) return;
+      if (!image.naturalWidth || !image.naturalHeight) {
+        appMessage.textContent = 'The image could not be opened.';
+        return;
+      }
       state.image = image;
       state.filename = file.name;
       exportButton.disabled = false;
@@ -342,7 +359,10 @@
       draw();
       fileStatus.textContent = `${state.filename} · ${image.naturalWidth} × ${image.naturalHeight}`;
     };
-    image.onerror = () => { URL.revokeObjectURL(objectUrl); appMessage.textContent = 'Could not read this PNG.'; };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      if (generation === loadGeneration) appMessage.textContent = 'The image could not be opened.';
+    };
     image.src = objectUrl;
   }
 
@@ -350,9 +370,35 @@
     loadPng(fileInput.files && fileInput.files[0]);
     fileInput.value = '';
   });
-  dropZone.addEventListener('dragover', (event) => event.preventDefault());
-  dropZone.addEventListener('drop', (event) => {
-    event.preventDefault();
-    loadPng(event.dataTransfer.files && event.dataTransfer.files[0]);
+  function dragHasPng(dataTransfer) {
+    if (!dataTransfer) return false;
+    const items = Array.from(dataTransfer.items || []);
+    if (items.some((item) => item.kind === 'file' && item.type === 'image/png')) return true;
+    return Array.from(dataTransfer.files || []).some((file) => file.type === 'image/png' || (!file.type && /\.png$/i.test(file.name)));
+  }
+
+  [dropZone, uploadDropTarget].forEach((target) => {
+    let dragDepth = 0;
+    target.addEventListener('dragenter', (event) => {
+      event.preventDefault();
+      if (!dragHasPng(event.dataTransfer)) return;
+      dragDepth += 1;
+      target.classList.add('drag-over');
+    });
+    target.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      if (event.dataTransfer && dragHasPng(event.dataTransfer)) event.dataTransfer.dropEffect = 'copy';
+    });
+    target.addEventListener('dragleave', (event) => {
+      event.preventDefault();
+      if (dragHasPng(event.dataTransfer)) dragDepth = Math.max(0, dragDepth - 1);
+      if (!dragDepth) target.classList.remove('drag-over');
+    });
+    target.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dragDepth = 0;
+      target.classList.remove('drag-over');
+      loadPng(event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]);
+    });
   });
 })();

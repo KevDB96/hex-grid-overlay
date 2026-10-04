@@ -63,6 +63,7 @@ h1 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.65rem); letter-spacing: .01em; 
 }
 
 .upload-button:hover { background: #414852; }
+.upload-button.drag-over, .drop-zone.drag-over { border-color: #8ab4f8; background-color: #29384a; color: #fff; }
 .upload-button:focus-within, .upload-button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
 .file-status { color: #aeb5be; font-size: .82rem; }
 .toolbar > label:not(.upload-button) { display: inline-flex; align-items: center; gap: 6px; color: #b9c0c9; font-size: .76rem; white-space: nowrap; }
@@ -101,6 +102,8 @@ h1 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.65rem); letter-spacing: .01em; 
 }
 
 .drop-zone:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 3px; }
+.drop-zone.drag-over::after, .upload-button.drag-over::after { content: "Drop PNG to open"; position: absolute; z-index: 3; inset: 8px; display: grid; place-items: center; border: 2px dashed #8ab4f8; border-radius: 5px; background: rgb(23 25 28 / 88%); color: #fff; font-weight: 700; pointer-events: none; }
+.upload-button { position: relative; }
 .drop-content { display: grid; justify-items: center; gap: 7px; pointer-events: none; text-align: center; }
 .drop-content strong { color: #dfe3e8; font-size: .96rem; }
 .drop-content span:last-child { font-size: .82rem; }
