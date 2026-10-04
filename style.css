@@ -98,7 +98,8 @@ h1 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.65rem); letter-spacing: .01em; 
 .drop-content strong { color: #dfe3e8; font-size: .96rem; }
 .drop-content span:last-child { font-size: .82rem; }
 .drop-mark { color: #87919d; font-size: 2rem; line-height: 1; }
-canvas { display: none; }
+canvas { display: none; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+.drop-zone.has-image .drop-content { display: none; }
 .app-message { min-height: 1.25em; margin: 0; color: #89929d; font-size: .78rem; }
 
 @media (max-width: 560px) {

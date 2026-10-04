@@ -8,7 +8,7 @@ The site is built with HTML5, CSS3, vanilla JavaScript, and the Canvas 2D API. I
 
 ## Run locally
 
-Open `index.html` directly in a modern browser. No package installation or build step is required. The PNG picker and drop area are visible in this shell; image decoding and rendering are not implemented yet.
+Open `index.html` directly in a modern browser. No package installation or build step is required. Select or drop a PNG to decode and display it at its native canvas resolution. Image bytes remain in the browser and are not uploaded.
 
 ## Hosting
 
