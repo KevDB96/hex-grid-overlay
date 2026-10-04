@@ -227,10 +227,31 @@
 
   function drawNow() {
     if (!state.image) return;
+    try {
+      drawImageToCanvas();
+    } catch (_) {
+      failLargeImage();
+    }
+  }
+
+  function failLargeImage() {
+    state.image = null;
+    state.filename = '';
+    exportButton.disabled = true;
+    resizeHandle.hidden = true;
+    canvas.style.display = 'none';
+    dropZone.classList.remove('has-image');
+    fileStatus.textContent = 'No image selected';
+    appMessage.textContent = 'This image is too large for your browser to process as one canvas.';
+  }
+
+  function drawImageToCanvas() {
+    if (!state.image) return;
     const width = state.image.naturalWidth;
     const height = state.image.naturalHeight;
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
+    if (canvas.width !== width || canvas.height !== height || !context) throw new Error('Canvas dimensions are unavailable.');
     context.clearRect(0, 0, width, height);
     context.drawImage(state.image, 0, 0);
     const spacing = drawGrid(context, width, height);
@@ -297,13 +318,13 @@
       exportCanvas.width = state.image.naturalWidth;
       exportCanvas.height = state.image.naturalHeight;
       const exportContext = exportCanvas.getContext('2d');
-      if (!exportContext) throw new Error('Canvas 2D context is unavailable.');
+      if (!exportContext || exportCanvas.width !== state.image.naturalWidth || exportCanvas.height !== state.image.naturalHeight) throw new Error('Canvas dimensions are unavailable.');
       exportContext.drawImage(state.image, 0, 0);
       drawGrid(exportContext, exportCanvas.width, exportCanvas.height);
       if (typeof exportCanvas.toBlob !== 'function') throw new Error('PNG encoding is unavailable.');
       exportCanvas.toBlob((blob) => {
         if (!blob) {
-          reportExportError(new Error('PNG encoding returned no data.'));
+          failLargeImage();
           return;
         }
         try {
@@ -320,7 +341,8 @@
         }
       }, 'image/png');
     } catch (error) {
-      reportExportError(error);
+      if (!exportButton.disabled) failLargeImage();
+      else reportExportError(error);
     }
   });
 
