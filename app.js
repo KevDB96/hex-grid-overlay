@@ -6,6 +6,7 @@
   const canvas = document.getElementById('workspace-canvas');
   const resizeHandle = document.getElementById('resize-handle');
   const resetButton = document.getElementById('reset-grid');
+  const exportButton = document.getElementById('export-png');
   const context = canvas.getContext('2d');
   const opacityValue = document.getElementById('opacity-value');
   const lineWidthValue = document.getElementById('line-width-value');
@@ -168,15 +169,8 @@
   resizeHandle.addEventListener('pointerup', finishResize);
   resizeHandle.addEventListener('pointercancel', finishResize);
 
-  function draw() {
-    if (!state.image) return;
-    const width = state.image.naturalWidth;
-    const height = state.image.naturalHeight;
-    canvas.width = width;
-    canvas.height = height;
-    context.clearRect(0, 0, width, height);
-    context.drawImage(state.image, 0, 0);
-
+  function drawGrid(targetContext, width, height) {
+    targetContext.save();
     const pointy = state.orientation === 'pointy';
     const densityFactor = 2.598076211;
     const spacing = Math.max(state.hexSize, Math.sqrt(width * height / (maxCells * densityFactor)) * 1.15);
@@ -212,20 +206,71 @@
         }
       }
     }
-    context.beginPath();
+    targetContext.beginPath();
     edges.forEach(([a, b]) => {
-      context.moveTo(a.x, a.y);
-      context.lineTo(b.x, b.y);
+      targetContext.moveTo(a.x, a.y);
+      targetContext.lineTo(b.x, b.y);
     });
-    context.strokeStyle = state.gridColor;
-    context.globalAlpha = state.gridOpacity;
-    context.lineWidth = state.lineWidth;
-    context.lineJoin = 'round';
-    context.stroke();
-    context.globalAlpha = 1;
+    targetContext.strokeStyle = state.gridColor;
+    targetContext.globalAlpha = state.gridOpacity;
+    targetContext.lineWidth = state.lineWidth;
+    targetContext.lineJoin = 'round';
+    targetContext.stroke();
+    targetContext.restore();
+    return spacing;
+  }
+
+  function draw() {
+    if (!state.image) return;
+    const width = state.image.naturalWidth;
+    const height = state.image.naturalHeight;
+    canvas.width = width;
+    canvas.height = height;
+    context.clearRect(0, 0, width, height);
+    context.drawImage(state.image, 0, 0);
+    const spacing = drawGrid(context, width, height);
     appMessage.textContent = spacing > state.hexSize ? 'Ready · grid detail limited for image size' : 'Ready';
     positionResizeHandle();
   }
+
+  function reportExportError(error) {
+    appMessage.textContent = 'PNG export failed. Your image and grid are unchanged; try again.';
+    window.dispatchEvent(new CustomEvent('hexgrid:export-error', { detail: { error } }));
+  }
+
+  exportButton.addEventListener('click', () => {
+    if (!state.image) return;
+    try {
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = state.image.naturalWidth;
+      exportCanvas.height = state.image.naturalHeight;
+      const exportContext = exportCanvas.getContext('2d');
+      if (!exportContext) throw new Error('Canvas 2D context is unavailable.');
+      exportContext.drawImage(state.image, 0, 0);
+      drawGrid(exportContext, exportCanvas.width, exportCanvas.height);
+      if (typeof exportCanvas.toBlob !== 'function') throw new Error('PNG encoding is unavailable.');
+      exportCanvas.toBlob((blob) => {
+        if (!blob) {
+          reportExportError(new Error('PNG encoding returned no data.'));
+          return;
+        }
+        try {
+          const downloadUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          const baseName = state.filename.replace(/\.png$/i, '');
+          link.download = `${baseName || 'image'}_hexgrid.png`;
+          link.href = downloadUrl;
+          link.click();
+          window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+          appMessage.textContent = 'PNG exported.';
+        } catch (error) {
+          reportExportError(error);
+        }
+      }, 'image/png');
+    } catch (error) {
+      reportExportError(error);
+    }
+  });
 
   function setStateFromControls() {
     const n = (key, fallback) => Number.isFinite(Number(controls[key].value)) ? Number(controls[key].value) : fallback;
@@ -286,6 +331,7 @@
       URL.revokeObjectURL(objectUrl);
       state.image = image;
       state.filename = file.name;
+      exportButton.disabled = false;
       state.offsetX = 0;
       state.offsetY = 0;
       controls.offsetX.value = '0';
