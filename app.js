@@ -8,6 +8,11 @@
   const resizeHandle = document.getElementById('resize-handle');
   const resetButton = document.getElementById('reset-grid');
   const exportButton = document.getElementById('export-png');
+  const exportZipButton = document.getElementById('export-zip');
+  const applyToAllButton = document.getElementById('apply-to-all');
+  const previousButton = document.getElementById('previous-image');
+  const nextButton = document.getElementById('next-image');
+  const imageSelector = document.getElementById('image-selector');
   const context = canvas.getContext('2d');
   const opacityValue = document.getElementById('opacity-value');
   const lineWidthValue = document.getElementById('line-width-value');
@@ -20,17 +25,50 @@
     lineWidth: document.getElementById('line-width'),
     orientation: document.getElementById('orientation')
   };
+
   const state = {
-    image: null, filename: '', hexSize: 40, offsetX: 0, offsetY: 0,
-    gridColor: '#ffffff', gridOpacity: 0.8, lineWidth: 2, orientation: 'pointy'
+    image: null,
+    filename: '',
+    hexSize: 40,
+    offsetX: 0,
+    offsetY: 0,
+    gridColor: '#ffffff',
+    gridOpacity: 0.8,
+    lineWidth: 2,
+    orientation: 'pointy',
+    batch: [],
+    activeIndex: -1
   };
+
+  const gridKeys = ['hexSize', 'offsetX', 'offsetY', 'gridColor', 'gridOpacity', 'lineWidth', 'orientation'];
   const preferenceKey = 'hex-grid-overlay.preferences.v1';
   const maxCells = 100000;
   let activePointerId = null;
   let dragStart = null;
   let resizeStart = null;
-  let loadGeneration = 0;
   let drawFrame = 0;
+  let loading = false;
+  let exporting = false;
+
+  function copyGrid(source = state) {
+    return Object.fromEntries(gridKeys.map((key) => [key, source[key]]));
+  }
+
+  function applyGrid(target, grid) {
+    gridKeys.forEach((key) => {
+      target[key] = grid[key];
+    });
+  }
+
+  function activeItem() {
+    return state.activeIndex >= 0 ? state.batch[state.activeIndex] : null;
+  }
+
+  function syncActiveEntry() {
+    const item = activeItem();
+    if (!item) return;
+    item.grid = copyGrid();
+  }
 
   function readPreferences() {
     try {
@@ -42,7 +80,7 @@
       if (saved.orientation === 'pointy' || saved.orientation === 'flat') state.orientation = saved.orientation;
       if (Number.isFinite(saved.hexSize) && saved.hexSize >= 5 && saved.hexSize <= 1000) state.hexSize = saved.hexSize;
     } catch (_) {
-      // Storage may be unavailable or contain invalid JSON; use the defaults.
+      // Storage is optional; invalid or unavailable storage falls back to defaults.
     }
   }
 
@@ -77,8 +115,58 @@
     return Math.min(1000, Math.max(5, Math.sqrt(image.naturalWidth * image.naturalHeight) / 40));
   }
 
+  function setBatchControls() {
+    const count = state.batch.length;
+    const hasImages = count > 0;
+    imageSelector.disabled = !hasImages;
+    previousButton.disabled = !hasImages || count < 2;
+    nextButton.disabled = !hasImages || count < 2;
+    applyToAllButton.disabled = count < 2;
+    exportButton.disabled = !hasImages || exporting;
+    exportZipButton.disabled = !hasImages || exporting;
+  }
+
+  function rebuildImageSelector() {
+    imageSelector.replaceChildren();
+    state.batch.forEach((item, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = `${index + 1}. ${item.filename}`;
+      imageSelector.appendChild(option);
+    });
+    if (state.activeIndex >= 0) imageSelector.value = String(state.activeIndex);
+    setBatchControls();
+  }
+
+  function updateFileStatus() {
+    const item = activeItem();
+    if (!item) {
+      fileStatus.textContent = 'No images selected';
+      return;
+    }
+    fileStatus.textContent = `${state.activeIndex + 1}/${state.batch.length} · ${item.filename} · ${item.image.naturalWidth} × ${item.image.naturalHeight}`;
+  }
+
+  function activateImage(index) {
+    if (!state.batch.length) return;
+    syncActiveEntry();
+    const count = state.batch.length;
+    state.activeIndex = ((index % count) + count) % count;
+    const item = activeItem();
+    state.image = item.image;
+    state.filename = item.filename;
+    applyGrid(state, item.grid);
+    syncControlsFromState();
+    rebuildImageSelector();
+    updateFileStatus();
+    canvas.style.display = 'block';
+    dropZone.classList.add('has-image');
+    draw();
+  }
+
   readPreferences();
   syncControlsFromState();
+  setBatchControls();
 
   function canvasPoint(event) {
     const bounds = canvas.getBoundingClientRect();
@@ -107,6 +195,7 @@
   function applyHexSize(value) {
     state.hexSize = Math.min(1000, Math.max(5, Number(value)));
     controls.hexSize.value = String(Number(state.hexSize.toFixed(2)));
+    syncActiveEntry();
     savePreferences();
     draw();
   }
@@ -127,7 +216,7 @@
     state.offsetY = dragStart.offsetY + point.y - dragStart.pointerY;
     controls.offsetX.value = String(state.offsetX);
     controls.offsetY.value = String(state.offsetY);
-    savePreferences();
+    syncActiveEntry();
     draw();
   });
 
@@ -174,19 +263,19 @@
   resizeHandle.addEventListener('pointercancel', finishResize);
   resizeHandle.addEventListener('lostpointercapture', finishResize);
 
-  function drawGrid(targetContext, width, height) {
+  function drawGrid(targetContext, width, height, grid = state) {
     targetContext.save();
-    const pointy = state.orientation === 'pointy';
+    const pointy = grid.orientation === 'pointy';
     const densityFactor = 2.598076211;
-    const spacing = Math.max(state.hexSize, Math.sqrt(width * height / (maxCells * densityFactor)) * 1.15);
+    const spacing = Math.max(grid.hexSize, Math.sqrt(width * height / (maxCells * densityFactor)) * 1.15);
     const stepX = pointy ? Math.sqrt(3) * spacing : 1.5 * spacing;
     const stepY = pointy ? 1.5 * spacing : Math.sqrt(3) * spacing;
     const marginX = spacing * 2;
     const marginY = spacing * 2;
-    const colStart = Math.floor((-marginX - state.offsetX) / stepX) - 1;
-    const colEnd = Math.ceil((width + marginX - state.offsetX) / stepX) + 1;
-    const rowStart = Math.floor((-marginY - state.offsetY) / stepY) - 1;
-    const rowEnd = Math.ceil((height + marginY - state.offsetY) / stepY) + 1;
+    const colStart = Math.floor((-marginX - grid.offsetX) / stepX) - 1;
+    const colEnd = Math.ceil((width + marginX - grid.offsetX) / stepX) + 1;
+    const rowStart = Math.floor((-marginY - grid.offsetY) / stepY) - 1;
+    const rowEnd = Math.ceil((height + marginY - grid.offsetY) / stepY) + 1;
 
     const edges = new Map();
     const vertexAt = (cx, cy, vertex) => {
@@ -197,12 +286,13 @@
       const qy = Math.round(y * 1000000) / 1000000;
       return { x: qx, y: qy, key: `${Math.round(qx * 1000000)},${Math.round(qy * 1000000)}` };
     };
+
     for (let row = rowStart; row <= rowEnd; row += 1) {
       const staggerX = pointy && Math.abs(row % 2) === 1 ? stepX / 2 : 0;
       for (let col = colStart; col <= colEnd; col += 1) {
         const staggerY = !pointy && Math.abs(col % 2) === 1 ? stepY / 2 : 0;
-        const cx = state.offsetX + col * stepX + staggerX;
-        const cy = state.offsetY + row * stepY + staggerY;
+        const cx = grid.offsetX + col * stepX + staggerX;
+        const cy = grid.offsetY + row * stepY + staggerY;
         for (let vertex = 0; vertex < 6; vertex += 1) {
           const a = vertexAt(cx, cy, vertex);
           const b = vertexAt(cx, cy, (vertex + 1) % 6);
@@ -211,14 +301,15 @@
         }
       }
     }
+
     targetContext.beginPath();
     edges.forEach(([a, b]) => {
       targetContext.moveTo(a.x, a.y);
       targetContext.lineTo(b.x, b.y);
     });
-    targetContext.strokeStyle = state.gridColor;
-    targetContext.globalAlpha = state.gridOpacity;
-    targetContext.lineWidth = state.lineWidth;
+    targetContext.strokeStyle = grid.gridColor;
+    targetContext.globalAlpha = grid.gridOpacity;
+    targetContext.lineWidth = grid.lineWidth;
     targetContext.lineJoin = 'round';
     targetContext.stroke();
     targetContext.restore();
@@ -230,19 +321,8 @@
     try {
       drawImageToCanvas();
     } catch (_) {
-      failLargeImage();
+      appMessage.textContent = 'This image is too large for your browser to process as one canvas.';
     }
-  }
-
-  function failLargeImage() {
-    state.image = null;
-    state.filename = '';
-    exportButton.disabled = true;
-    resizeHandle.hidden = true;
-    canvas.style.display = 'none';
-    dropZone.classList.remove('has-image');
-    fileStatus.textContent = 'No image selected';
-    appMessage.textContent = 'This image is too large for your browser to process as one canvas.';
   }
 
   function drawImageToCanvas() {
@@ -268,6 +348,7 @@
   }
 
   function resetGrid() {
+    if (!state.image) return;
     state.offsetX = 0;
     state.offsetY = 0;
     state.gridColor = '#ffffff';
@@ -276,6 +357,7 @@
     state.orientation = 'pointy';
     state.hexSize = defaultHexSize(state.image);
     syncControlsFromState();
+    syncActiveEntry();
     savePreferences();
     draw();
   }
@@ -285,7 +367,7 @@
   }
 
   document.addEventListener('keydown', (event) => {
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || isFormFocus(event.target)) return;
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || isFormFocus(event.target) || !state.image) return;
     let handled = true;
     const step = event.shiftKey ? 10 : 1;
     if (event.key === 'ArrowLeft') state.offsetX -= step;
@@ -301,7 +383,7 @@
     if (event.key.startsWith('Arrow')) {
       controls.offsetX.value = String(state.offsetX);
       controls.offsetY.value = String(state.offsetY);
-      savePreferences();
+      syncActiveEntry();
       draw();
     }
   });
@@ -311,38 +393,190 @@
     window.dispatchEvent(new CustomEvent('hexgrid:export-error', { detail: { error } }));
   }
 
-  exportButton.addEventListener('click', () => {
-    if (!state.image) return;
+  function renderItemToBlob(item) {
+    return new Promise((resolve, reject) => {
+      try {
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = item.image.naturalWidth;
+        exportCanvas.height = item.image.naturalHeight;
+        const exportContext = exportCanvas.getContext('2d');
+        if (!exportContext || exportCanvas.width !== item.image.naturalWidth || exportCanvas.height !== item.image.naturalHeight) {
+          throw new Error('Canvas dimensions are unavailable.');
+        }
+        exportContext.drawImage(item.image, 0, 0);
+        drawGrid(exportContext, exportCanvas.width, exportCanvas.height, item.grid);
+        if (typeof exportCanvas.toBlob !== 'function') throw new Error('PNG encoding is unavailable.');
+        exportCanvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG encoding returned no data.')), 'image/png');
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = url;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function outputPngName(filename) {
+    const base = filename.replace(/\.png$/i, '') || 'image';
+    return `${base}_hexgrid.png`;
+  }
+
+  exportButton.addEventListener('click', async () => {
+    const item = activeItem();
+    if (!item || exporting) return;
+    syncActiveEntry();
     try {
-      const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = state.image.naturalWidth;
-      exportCanvas.height = state.image.naturalHeight;
-      const exportContext = exportCanvas.getContext('2d');
-      if (!exportContext || exportCanvas.width !== state.image.naturalWidth || exportCanvas.height !== state.image.naturalHeight) throw new Error('Canvas dimensions are unavailable.');
-      exportContext.drawImage(state.image, 0, 0);
-      drawGrid(exportContext, exportCanvas.width, exportCanvas.height);
-      if (typeof exportCanvas.toBlob !== 'function') throw new Error('PNG encoding is unavailable.');
-      exportCanvas.toBlob((blob) => {
-        if (!blob) {
-          failLargeImage();
-          return;
-        }
-        try {
-          const downloadUrl = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          const baseName = state.filename.replace(/\.png$/i, '');
-          link.download = `${baseName || 'image'}_hexgrid.png`;
-          link.href = downloadUrl;
-          link.click();
-          window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
-          appMessage.textContent = 'PNG exported.';
-        } catch (error) {
-          reportExportError(error);
-        }
-      }, 'image/png');
+      exporting = true;
+      setBatchControls();
+      appMessage.textContent = 'Rendering current PNG…';
+      const blob = await renderItemToBlob(item);
+      downloadBlob(blob, outputPngName(item.filename));
+      appMessage.textContent = 'PNG exported.';
     } catch (error) {
-      if (!exportButton.disabled) failLargeImage();
-      else reportExportError(error);
+      reportExportError(error);
+    } finally {
+      exporting = false;
+      setBatchControls();
+    }
+  });
+
+  function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i += 1) {
+      crc ^= bytes[i];
+      for (let bit = 0; bit < 8; bit += 1) {
+        crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+      }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function dosDateTime(date = new Date()) {
+    const year = Math.max(1980, date.getFullYear());
+    return {
+      time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+      date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+    };
+  }
+
+  function writeUint16(view, offset, value) {
+    view.setUint16(offset, value, true);
+  }
+
+  function writeUint32(view, offset, value) {
+    view.setUint32(offset, value >>> 0, true);
+  }
+
+  function createStoredZip(entries) {
+    const encoder = new TextEncoder();
+    const localParts = [];
+    const centralParts = [];
+    let localOffset = 0;
+    let centralSize = 0;
+    const stamp = dosDateTime();
+
+    entries.forEach((entry) => {
+      const nameBytes = encoder.encode(entry.name);
+      const data = entry.data;
+      const crc = crc32(data);
+
+      const localHeader = new Uint8Array(30 + nameBytes.length);
+      const localView = new DataView(localHeader.buffer);
+      writeUint32(localView, 0, 0x04034b50);
+      writeUint16(localView, 4, 20);
+      writeUint16(localView, 6, 0x0800);
+      writeUint16(localView, 8, 0);
+      writeUint16(localView, 10, stamp.time);
+      writeUint16(localView, 12, stamp.date);
+      writeUint32(localView, 14, crc);
+      writeUint32(localView, 18, data.length);
+      writeUint32(localView, 22, data.length);
+      writeUint16(localView, 26, nameBytes.length);
+      writeUint16(localView, 28, 0);
+      localHeader.set(nameBytes, 30);
+      localParts.push(localHeader, data);
+
+      const centralHeader = new Uint8Array(46 + nameBytes.length);
+      const centralView = new DataView(centralHeader.buffer);
+      writeUint32(centralView, 0, 0x02014b50);
+      writeUint16(centralView, 4, 20);
+      writeUint16(centralView, 6, 20);
+      writeUint16(centralView, 8, 0x0800);
+      writeUint16(centralView, 10, 0);
+      writeUint16(centralView, 12, stamp.time);
+      writeUint16(centralView, 14, stamp.date);
+      writeUint32(centralView, 16, crc);
+      writeUint32(centralView, 20, data.length);
+      writeUint32(centralView, 24, data.length);
+      writeUint16(centralView, 28, nameBytes.length);
+      writeUint16(centralView, 30, 0);
+      writeUint16(centralView, 32, 0);
+      writeUint16(centralView, 34, 0);
+      writeUint16(centralView, 36, 0);
+      writeUint32(centralView, 38, 0);
+      writeUint32(centralView, 42, localOffset);
+      centralHeader.set(nameBytes, 46);
+      centralParts.push(centralHeader);
+      centralSize += centralHeader.length;
+      localOffset += localHeader.length + data.length;
+    });
+
+    const end = new Uint8Array(22);
+    const endView = new DataView(end.buffer);
+    writeUint32(endView, 0, 0x06054b50);
+    writeUint16(endView, 4, 0);
+    writeUint16(endView, 6, 0);
+    writeUint16(endView, 8, entries.length);
+    writeUint16(endView, 10, entries.length);
+    writeUint32(endView, 12, centralSize);
+    writeUint32(endView, 16, localOffset);
+    writeUint16(endView, 20, 0);
+
+    return new Blob([...localParts, ...centralParts, end], { type: 'application/zip' });
+  }
+
+  function uniqueOutputNames(items) {
+    const used = new Map();
+    return items.map((item) => {
+      const original = outputPngName(item.filename);
+      const stem = original.replace(/\.png$/i, '');
+      const count = used.get(original.toLowerCase()) || 0;
+      used.set(original.toLowerCase(), count + 1);
+      return count ? `${stem}_${count + 1}.png` : original;
+    });
+  }
+
+  exportZipButton.addEventListener('click', async () => {
+    if (!state.batch.length || exporting) return;
+    syncActiveEntry();
+    exporting = true;
+    setBatchControls();
+    const names = uniqueOutputNames(state.batch);
+    const entries = [];
+    try {
+      for (let index = 0; index < state.batch.length; index += 1) {
+        appMessage.textContent = `Rendering ${index + 1}/${state.batch.length}: ${state.batch[index].filename}`;
+        const blob = await renderItemToBlob(state.batch[index]);
+        entries.push({ name: names[index], data: new Uint8Array(await blob.arrayBuffer()) });
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      }
+      appMessage.textContent = 'Building ZIP…';
+      const zip = createStoredZip(entries);
+      const date = new Date().toISOString().slice(0, 10);
+      downloadBlob(zip, `hexgrid_batch_${date}.zip`);
+      appMessage.textContent = `${state.batch.length} PNGs exported in one ZIP.`;
+    } catch (error) {
+      appMessage.textContent = 'The ZIP could not be exported. Please try again.';
+      window.dispatchEvent(new CustomEvent('hexgrid:export-error', { detail: { error } }));
+    } finally {
+      exporting = false;
+      setBatchControls();
     }
   });
 
@@ -358,6 +592,7 @@
     opacityValue.value = `${Math.round(state.gridOpacity * 100)}%`;
     lineWidthValue.value = `${state.lineWidth} px`;
     state.orientation = controls.orientation.value === 'flat' ? 'flat' : 'pointy';
+    syncActiveEntry();
     savePreferences();
   }
 
@@ -371,73 +606,114 @@
     draw();
   });
 
-  resetButton.addEventListener('click', () => {
-    resetGrid();
+  resetButton.addEventListener('click', resetGrid);
+
+  applyToAllButton.addEventListener('click', () => {
+    if (state.batch.length < 2) return;
+    syncActiveEntry();
+    const grid = copyGrid();
+    state.batch.forEach((item) => {
+      item.grid = { ...grid };
+    });
+    appMessage.textContent = `Current grid copied to all ${state.batch.length} PNGs. You can still adjust every PNG individually.`;
   });
 
-  function loadPng(file) {
-    if (!file) return;
-    if (file.type ? file.type !== 'image/png' : !/\.png$/i.test(file.name)) {
-      appMessage.textContent = 'Please select a PNG image.';
-      return;
-    }
-    const generation = ++loadGeneration;
-    file.slice(0, 8).arrayBuffer().then((buffer) => {
-      if (generation !== loadGeneration) return;
-      const signature = new Uint8Array(buffer);
-      const isPng = [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => signature[index] === byte);
-      if (!isPng) { appMessage.textContent = 'Please select a PNG image.'; return; }
-      decodePng(file, generation);
-    }).catch(() => {
-      if (generation === loadGeneration) appMessage.textContent = 'The image could not be opened.';
+  previousButton.addEventListener('click', () => activateImage(state.activeIndex - 1));
+  nextButton.addEventListener('click', () => activateImage(state.activeIndex + 1));
+  imageSelector.addEventListener('change', () => activateImage(Number(imageSelector.value)));
+
+  function isPngFile(file) {
+    return !!file && (file.type ? file.type === 'image/png' : /\.png$/i.test(file.name));
+  }
+
+  async function hasPngSignature(file) {
+    const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    return [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => signature[index] === byte);
+  }
+
+  function decodePng(file) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      let objectUrl;
+      try {
+        objectUrl = URL.createObjectURL(file);
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        if (!image.naturalWidth || !image.naturalHeight) {
+          reject(new Error('Image has invalid dimensions.'));
+          return;
+        }
+        resolve(image);
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Image decode failed.'));
+      };
+      image.src = objectUrl;
     });
   }
 
-  function decodePng(file, generation) {
-    const image = new Image();
-    let objectUrl;
+  async function loadPngs(fileList) {
+    if (loading) return;
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    loading = true;
+    appMessage.textContent = `Loading ${files.length} file${files.length === 1 ? '' : 's'}…`;
+    const firstNewIndex = state.batch.length;
+    let added = 0;
+    let skipped = 0;
+    const template = copyGrid();
+
     try {
-      objectUrl = URL.createObjectURL(file);
-    } catch (_) {
-      appMessage.textContent = 'The image could not be opened.';
-      return;
-    }
-    image.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      if (generation !== loadGeneration) return;
-      if (!image.naturalWidth || !image.naturalHeight) {
-        appMessage.textContent = 'The image could not be opened.';
-        return;
+      for (const file of files) {
+        if (!isPngFile(file)) {
+          skipped += 1;
+          continue;
+        }
+        try {
+          if (!(await hasPngSignature(file))) {
+            skipped += 1;
+            continue;
+          }
+          const image = await decodePng(file);
+          const grid = { ...template };
+          if (!state.image && added === 0) grid.hexSize = defaultHexSize(image);
+          state.batch.push({
+            filename: file.name,
+            image,
+            grid
+          });
+          added += 1;
+        } catch (_) {
+          skipped += 1;
+        }
       }
-      state.image = image;
-      state.filename = file.name;
-      exportButton.disabled = false;
-      state.offsetX = 0;
-      state.offsetY = 0;
-      controls.offsetX.value = '0';
-      controls.offsetY.value = '0';
-      setStateFromControls();
-      canvas.style.display = 'block';
-      dropZone.classList.add('has-image');
-      draw();
-      fileStatus.textContent = `${state.filename} · ${image.naturalWidth} × ${image.naturalHeight}`;
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      if (generation === loadGeneration) appMessage.textContent = 'The image could not be opened.';
-    };
-    image.src = objectUrl;
+
+      if (added) {
+        activateImage(firstNewIndex);
+        rebuildImageSelector();
+        appMessage.textContent = `${added} PNG${added === 1 ? '' : 's'} added${skipped ? ` · ${skipped} skipped` : ''}.`;
+      } else {
+        appMessage.textContent = skipped ? 'No valid PNG images were added.' : 'Please select PNG images.';
+      }
+    } finally {
+      loading = false;
+      fileInput.value = '';
+      setBatchControls();
+    }
   }
 
-  fileInput.addEventListener('change', () => {
-    loadPng(fileInput.files && fileInput.files[0]);
-    fileInput.value = '';
-  });
+  fileInput.addEventListener('change', () => loadPngs(fileInput.files));
+
   function dragHasPng(dataTransfer) {
     if (!dataTransfer) return false;
     const items = Array.from(dataTransfer.items || []);
     if (items.some((item) => item.kind === 'file' && item.type === 'image/png')) return true;
-    return Array.from(dataTransfer.files || []).some((file) => file.type === 'image/png' || (!file.type && /\.png$/i.test(file.name)));
+    return Array.from(dataTransfer.files || []).some(isPngFile);
   }
 
   [dropZone, uploadDropTarget].forEach((target) => {
@@ -461,7 +737,7 @@
       event.preventDefault();
       dragDepth = 0;
       target.classList.remove('drag-over');
-      loadPng(event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]);
+      loadPngs(event.dataTransfer && event.dataTransfer.files);
     });
   });
 })();
