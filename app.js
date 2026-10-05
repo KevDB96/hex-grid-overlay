@@ -16,6 +16,7 @@
   const splitFourButton = document.getElementById('split-four');
   const previousButton = document.getElementById('previous-image');
   const nextButton = document.getElementById('next-image');
+  const removeImageButton = document.getElementById('remove-image');
   const imageSelector = document.getElementById('image-selector');
   const context = canvas.getContext('2d');
   const opacityValue = document.getElementById('opacity-value');
@@ -125,6 +126,7 @@
     imageSelector.disabled = !hasImages;
     previousButton.disabled = !hasImages || count < 2;
     nextButton.disabled = !hasImages || count < 2;
+    removeImageButton.disabled = !hasImages || exporting;
     applyToAllButton.disabled = count < 2 || exporting;
     setHexSizeAllButton.disabled = count < 2 || exporting;
     splitVerticalButton.disabled = !hasImages || exporting;
@@ -153,6 +155,35 @@
       return;
     }
     fileStatus.textContent = `${state.activeIndex + 1}/${state.batch.length} · ${item.filename} · ${item.image.naturalWidth} × ${item.image.naturalHeight}`;
+  }
+
+  function clearActiveWorkspace() {
+    state.image = null;
+    state.filename = '';
+    state.activeIndex = -1;
+    canvas.style.display = 'none';
+    if (context) context.clearRect(0, 0, canvas.width || 0, canvas.height || 0);
+    dropZone.classList.remove('has-image');
+    resizeHandle.hidden = true;
+    updateFileStatus();
+    rebuildImageSelector();
+  }
+
+  function removeCurrentImage() {
+    const item = activeItem();
+    if (!item || exporting) return;
+
+    const removedName = item.filename;
+    state.batch.splice(state.activeIndex, 1);
+
+    if (!state.batch.length) {
+      clearActiveWorkspace();
+      appMessage.textContent = `${removedName} removed. No PNGs remain in the batch.`;
+      return;
+    }
+
+    activateImage(Math.min(state.activeIndex, state.batch.length - 1));
+    appMessage.textContent = `${removedName} removed from the batch.`;
   }
 
   function activateImage(index) {
@@ -740,6 +771,7 @@
   splitVerticalButton.addEventListener('click', () => splitCurrentImage('vertical'));
   splitHorizontalButton.addEventListener('click', () => splitCurrentImage('horizontal'));
   splitFourButton.addEventListener('click', () => splitCurrentImage('four'));
+  removeImageButton.addEventListener('click', removeCurrentImage);
 
   previousButton.addEventListener('click', () => activateImage(state.activeIndex - 1));
   nextButton.addEventListener('click', () => activateImage(state.activeIndex + 1));
