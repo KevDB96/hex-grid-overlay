@@ -573,11 +573,11 @@
         children.push(await cropImageToItem(item, crops[index]));
       }
 
-      const insertIndex = state.activeIndex + 1;
-      state.batch.splice(insertIndex, 0, ...children);
+      const originalIndex = state.activeIndex;
+      state.batch.splice(originalIndex, 1, ...children);
       rebuildImageSelector();
-      activateImage(insertIndex);
-      appMessage.textContent = `Created ${children.length} split PNGs with seam-aligned grid offsets.`;
+      activateImage(originalIndex);
+      appMessage.textContent = `Created ${children.length} split PNGs and removed the original PNG from the batch.`;
     } catch (error) {
       appMessage.textContent = 'The PNG could not be split. Please try again.';
       window.dispatchEvent(new CustomEvent('hexgrid:split-error', { detail: { error } }));
