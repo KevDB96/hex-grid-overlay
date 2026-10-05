@@ -16,9 +16,16 @@
     </header>
 
     <section class="toolbar" aria-label="Image and grid controls">
-      <label id="upload-drop-target" class="upload-button" for="image-file">Open PNG</label>
-      <input id="image-file" class="visually-hidden" type="file" accept="image/png">
-      <span id="file-status" class="file-status" role="status" aria-live="polite">No image selected</span>
+      <label id="upload-drop-target" class="upload-button" for="image-file">Open PNGs</label>
+      <input id="image-file" class="visually-hidden" type="file" accept="image/png" multiple>
+      <span id="file-status" class="file-status" role="status" aria-live="polite">No images selected</span>
+
+      <div class="batch-nav" aria-label="Batch image navigation">
+        <button id="previous-image" class="upload-button" type="button" disabled>Previous</button>
+        <select id="image-selector" aria-label="Active PNG" disabled></select>
+        <button id="next-image" class="upload-button" type="button" disabled>Next</button>
+      </div>
+
       <label>Hex Size: <input id="hex-size" type="number" min="5" max="1000" step="0.1" value="40"> px</label>
       <label>Offset X <input id="offset-x" type="number" step="1" value="0"></label>
       <label>Offset Y <input id="offset-y" type="number" step="1" value="0"></label>
@@ -26,16 +33,19 @@
       <label class="compact-control">Opacity <input id="grid-opacity" type="range" min="0" max="100" step="1" value="80" aria-label="Grid opacity"><output id="opacity-value" for="grid-opacity">80%</output></label>
       <label class="compact-control">Line width <input id="line-width" type="range" min="0.5" max="10" step="0.5" value="2" aria-label="Line thickness"><output id="line-width-value" for="line-width">2 px</output></label>
       <label class="compact-control">Orientation <select id="orientation"><option value="pointy">Pointy Top</option><option value="flat">Flat Top</option></select></label>
-      <button id="reset-grid" class="upload-button" type="button">Reset Grid</button>
-      <button id="export-png" class="upload-button" type="button" disabled>Export PNG</button>
+
+      <button id="apply-to-all" class="upload-button" type="button" disabled>Apply Current Grid to All</button>
+      <button id="reset-grid" class="upload-button" type="button">Reset Current Grid</button>
+      <button id="export-png" class="upload-button" type="button" disabled>Export Current PNG</button>
+      <button id="export-zip" class="upload-button primary-action" type="button" disabled>Export All ZIP</button>
     </section>
 
     <section class="workspace" aria-label="Image workspace">
       <div id="drop-zone" class="drop-zone" tabindex="0" aria-label="PNG drop area">
         <div class="drop-content">
           <span class="drop-mark" aria-hidden="true">＋</span>
-          <strong>Drop a PNG here</strong>
-          <span>or use Open PNG above</span>
+          <strong>Drop one or more PNGs here</strong>
+          <span>or use Open PNGs above</span>
         </div>
         <canvas id="workspace-canvas" aria-label="Image workspace canvas"></canvas>
         <button id="resize-handle" class="resize-handle" type="button" aria-label="Drag to resize hex grid" title="Drag to resize hex grid" hidden></button>
