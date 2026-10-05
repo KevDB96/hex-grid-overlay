@@ -41,7 +41,7 @@ h1 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.65rem); letter-spacing: .01em; 
   align-items: center;
   flex-wrap: wrap;
   min-height: 52px;
-  gap: 12px;
+  gap: 10px;
   padding: 9px 12px;
   border: 1px solid #34383e;
   border-radius: 8px;
@@ -49,23 +49,34 @@ h1 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.65rem); letter-spacing: .01em; 
 }
 
 .upload-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 40px;
   padding: 0 14px;
   border: 1px solid #59616b;
   border-radius: 5px;
   background: #343a42;
   color: #f3f4f6;
-  font-size: .88rem;
+  font: inherit;
+  font-size: .84rem;
   font-weight: 600;
   cursor: pointer;
 }
 
-.upload-button:hover { background: #414852; }
+.upload-button:hover:not(:disabled) { background: #414852; }
+.upload-button:disabled { opacity: .42; cursor: default; }
+.primary-action { border-color: #7ea6df; background: #315987; }
+.primary-action:hover:not(:disabled) { background: #3d6da3; }
 .upload-button.drag-over, .drop-zone.drag-over { border-color: #8ab4f8; background-color: #29384a; color: #fff; }
 .upload-button:focus-within, .upload-button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+
 .file-status { color: #aeb5be; font-size: .82rem; }
+.batch-nav { display: inline-flex; align-items: center; gap: 6px; padding-right: 2px; }
+.batch-nav .upload-button { min-height: 36px; padding: 0 9px; font-size: .76rem; }
+.batch-nav select { width: min(280px, 30vw); }
+
 .toolbar > label:not(.upload-button) { display: inline-flex; align-items: center; gap: 6px; color: #b9c0c9; font-size: .76rem; white-space: nowrap; }
 .toolbar > .compact-control { gap: 5px; }
 .toolbar input[type="number"] { width: 66px; min-height: 36px; padding: 3px 5px; border: 1px solid #4a515b; border-radius: 4px; background: #17191c; color: #e7e9ec; }
@@ -102,8 +113,7 @@ h1 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.65rem); letter-spacing: .01em; 
 }
 
 .drop-zone:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 3px; }
-.drop-zone.drag-over::after, .upload-button.drag-over::after { content: "Drop PNG to open"; position: absolute; z-index: 3; inset: 8px; display: grid; place-items: center; border: 2px dashed #8ab4f8; border-radius: 5px; background: rgb(23 25 28 / 88%); color: #fff; font-weight: 700; pointer-events: none; }
-.upload-button { position: relative; }
+.drop-zone.drag-over::after, .upload-button.drag-over::after { content: "Drop PNGs to add"; position: absolute; z-index: 3; inset: 8px; display: grid; place-items: center; border: 2px dashed #8ab4f8; border-radius: 5px; background: rgb(23 25 28 / 88%); color: #fff; font-weight: 700; pointer-events: none; }
 .drop-content { display: grid; justify-items: center; gap: 7px; pointer-events: none; text-align: center; }
 .drop-content strong { color: #dfe3e8; font-size: .96rem; }
 .drop-content span:last-child { font-size: .82rem; }
@@ -116,10 +126,16 @@ canvas { display: none; max-width: 100%; max-height: 100%; width: auto; height: 
 .drop-zone.has-image .drop-content { display: none; }
 .app-message { min-height: 1.25em; margin: 0; color: #89929d; font-size: .78rem; }
 
+@media (max-width: 760px) {
+  .batch-nav { width: 100%; }
+  .batch-nav select { flex: 1; width: auto; min-width: 0; }
+}
+
 @media (max-width: 560px) {
   .app-shell { padding: 18px 12px 14px; gap: 12px; }
   .app-header { align-items: flex-start; flex-direction: column; gap: 5px; }
   .toolbar { align-items: flex-start; }
   .workspace { min-height: 64vh; padding: 8px; }
   .drop-zone { min-height: 300px; }
+  .batch-nav .upload-button { padding: 0 8px; }
 }
