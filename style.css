@@ -73,8 +73,8 @@ h1 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.65rem); letter-spacing: .01em; 
 .upload-button:focus-within, .upload-button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
 
 .file-status { color: #aeb5be; font-size: .82rem; }
-.batch-nav { display: inline-flex; align-items: center; gap: 6px; padding-right: 2px; }
-.batch-nav .upload-button { min-height: 36px; padding: 0 9px; font-size: .76rem; }
+.batch-nav, .split-group { display: inline-flex; align-items: center; gap: 6px; padding-right: 2px; flex-wrap: wrap; }
+.batch-nav .upload-button, .split-group .upload-button { min-height: 36px; padding: 0 9px; font-size: .76rem; }
 .batch-nav select { width: min(280px, 30vw); }
 
 .toolbar > label:not(.upload-button) { display: inline-flex; align-items: center; gap: 6px; color: #b9c0c9; font-size: .76rem; white-space: nowrap; }
@@ -129,6 +129,7 @@ canvas { display: none; max-width: 100%; max-height: 100%; width: auto; height: 
 @media (max-width: 760px) {
   .batch-nav { width: 100%; }
   .batch-nav select { flex: 1; width: auto; min-width: 0; }
+  .split-group { width: 100%; }
 }
 
 @media (max-width: 560px) {
