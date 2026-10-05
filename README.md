@@ -1,15 +1,26 @@
 # Hex Grid Overlay
 
-Hex Grid Overlay is a browser-based editor for adding a pointy-top or flat-top hex grid to a PNG. Set the grid size, position, color, opacity, and line width, then export a clean PNG at the source image's dimensions.
+Hex Grid Overlay is a static browser editor for adding pointy-top or flat-top hex grids to PNG maps.
+
+## Batch workflow
+
+- Select or drop one or more PNGs.
+- Use Previous / Next or the image selector to move through the loaded batch.
+- Every PNG has its own independent grid size, position, color, opacity, line width, and orientation.
+- **Apply Current Grid to All** copies the active PNG's grid settings to every loaded PNG as a starting point. After that, each PNG can still be adjusted independently.
+- **Export Current PNG** downloads only the active image.
+- **Export All ZIP** renders every loaded PNG with its own stored grid settings and downloads them together in one ZIP file.
 
 ## Architecture and privacy
 
-The site is built with HTML5, CSS3, vanilla JavaScript, and the Canvas 2D API. It is a static site with no backend, database, authentication, serverless functions, or runtime dependencies. Image processing is intended to happen locally in the browser, and image data must never leave the browser.
+The site uses HTML5, CSS3, vanilla JavaScript, and the Canvas 2D API only. ZIP generation is implemented in-browser with no runtime dependency. There is no backend, database, authentication, serverless function, or image-upload API. Image data stays in the browser.
 
 ## Run locally
 
-Open `index.html` directly in a modern browser. No package installation or build step is required. Select or drop a PNG to display it at native canvas resolution. Drag the image to move the grid, drag the yellow handle to resize it, or use the numeric controls. Arrow keys move the grid by one pixel; Shift+Arrow moves it by ten. `+` and `-` adjust hex size, and `R` resets the grid when focus is outside a control. Export saves a PNG at the source dimensions. Image bytes remain in the browser and are not uploaded.
+Open `index.html` directly in a modern browser. No package installation or build step is required.
+
+Drag the map to move its grid, drag the yellow handle to resize it, or use the numeric controls. Arrow keys move the active grid by one pixel; Shift+Arrow moves it by ten. `+` and `-` adjust hex size, and `R` resets the active grid when focus is outside a control.
 
 ## Hosting
 
-The project is designed for static GitHub Pages hosting. The hosted URL is `https://kevdb96.github.io/hex-grid-overlay/` once Pages is enabled for the `main` branch, repository root.
+The project is designed for static GitHub Pages hosting from the `main` branch repository root.
