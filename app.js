@@ -10,6 +10,10 @@
   const exportButton = document.getElementById('export-png');
   const exportZipButton = document.getElementById('export-zip');
   const applyToAllButton = document.getElementById('apply-to-all');
+  const setHexSizeAllButton = document.getElementById('set-hex-size-all');
+  const splitVerticalButton = document.getElementById('split-vertical');
+  const splitHorizontalButton = document.getElementById('split-horizontal');
+  const splitFourButton = document.getElementById('split-four');
   const previousButton = document.getElementById('previous-image');
   const nextButton = document.getElementById('next-image');
   const imageSelector = document.getElementById('image-selector');
@@ -121,7 +125,11 @@
     imageSelector.disabled = !hasImages;
     previousButton.disabled = !hasImages || count < 2;
     nextButton.disabled = !hasImages || count < 2;
-    applyToAllButton.disabled = count < 2;
+    applyToAllButton.disabled = count < 2 || exporting;
+    setHexSizeAllButton.disabled = count < 2 || exporting;
+    splitVerticalButton.disabled = !hasImages || exporting;
+    splitHorizontalButton.disabled = !hasImages || exporting;
+    splitFourButton.disabled = !hasImages || exporting;
     exportButton.disabled = !hasImages || exporting;
     exportZipButton.disabled = !hasImages || exporting;
   }
@@ -427,6 +435,107 @@
     return `${base}_hexgrid.png`;
   }
 
+  function splitName(filename, suffix) {
+    const base = filename.replace(/\.png$/i, '') || 'image';
+    return `${base}_${suffix}.png`;
+  }
+
+  function blobToImage(blob) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      const objectUrl = URL.createObjectURL(blob);
+      image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(image);
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Split image could not be decoded.'));
+      };
+      image.src = objectUrl;
+    });
+  }
+
+  async function cropImageToItem(item, crop) {
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = crop.w;
+    cropCanvas.height = crop.h;
+    const cropContext = cropCanvas.getContext('2d');
+    if (!cropContext || cropCanvas.width !== crop.w || cropCanvas.height !== crop.h) {
+      throw new Error('Split canvas dimensions are unavailable.');
+    }
+    cropContext.drawImage(item.image, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
+    const blob = await new Promise((resolve, reject) => {
+      cropCanvas.toBlob((result) => result ? resolve(result) : reject(new Error('Split PNG encoding returned no data.')), 'image/png');
+    });
+    const image = await blobToImage(blob);
+    return {
+      filename: crop.filename,
+      image,
+      grid: {
+        ...item.grid,
+        offsetX: item.grid.offsetX - crop.x,
+        offsetY: item.grid.offsetY - crop.y
+      }
+    };
+  }
+
+  async function splitCurrentImage(mode) {
+    const item = activeItem();
+    if (!item || exporting) return;
+    syncActiveEntry();
+    exporting = true;
+    setBatchControls();
+
+    try {
+      const width = item.image.naturalWidth;
+      const height = item.image.naturalHeight;
+      const leftWidth = Math.floor(width / 2);
+      const rightWidth = width - leftWidth;
+      const topHeight = Math.floor(height / 2);
+      const bottomHeight = height - topHeight;
+      let crops;
+
+      if (mode === 'vertical') {
+        crops = [
+          { x: 0, y: 0, w: leftWidth, h: height, filename: splitName(item.filename, 'left') },
+          { x: leftWidth, y: 0, w: rightWidth, h: height, filename: splitName(item.filename, 'right') }
+        ];
+      } else if (mode === 'horizontal') {
+        crops = [
+          { x: 0, y: 0, w: width, h: topHeight, filename: splitName(item.filename, 'top') },
+          { x: 0, y: topHeight, w: width, h: bottomHeight, filename: splitName(item.filename, 'bottom') }
+        ];
+      } else {
+        crops = [
+          { x: 0, y: 0, w: leftWidth, h: topHeight, filename: splitName(item.filename, 'top_left') },
+          { x: leftWidth, y: 0, w: rightWidth, h: topHeight, filename: splitName(item.filename, 'top_right') },
+          { x: 0, y: topHeight, w: leftWidth, h: bottomHeight, filename: splitName(item.filename, 'bottom_left') },
+          { x: leftWidth, y: topHeight, w: rightWidth, h: bottomHeight, filename: splitName(item.filename, 'bottom_right') }
+        ];
+      }
+
+      appMessage.textContent = `Splitting ${item.filename}…`;
+      const children = [];
+      for (let index = 0; index < crops.length; index += 1) {
+        appMessage.textContent = `Creating split ${index + 1}/${crops.length}…`;
+        children.push(await cropImageToItem(item, crops[index]));
+      }
+
+      const insertIndex = state.activeIndex + 1;
+      state.batch.splice(insertIndex, 0, ...children);
+      rebuildImageSelector();
+      activateImage(insertIndex);
+      appMessage.textContent = `Created ${children.length} split PNGs with seam-aligned grid offsets.`;
+    } catch (error) {
+      appMessage.textContent = 'The PNG could not be split. Please try again.';
+      window.dispatchEvent(new CustomEvent('hexgrid:split-error', { detail: { error } }));
+    } finally {
+      exporting = false;
+      setBatchControls();
+    }
+  }
+
   exportButton.addEventListener('click', async () => {
     const item = activeItem();
     if (!item || exporting) return;
@@ -617,6 +726,20 @@
     });
     appMessage.textContent = `Current grid copied to all ${state.batch.length} PNGs. You can still adjust every PNG individually.`;
   });
+
+  setHexSizeAllButton.addEventListener('click', () => {
+    if (state.batch.length < 2) return;
+    syncActiveEntry();
+    const sharedHexSize = state.hexSize;
+    state.batch.forEach((item) => {
+      item.grid.hexSize = sharedHexSize;
+    });
+    appMessage.textContent = `Hex size ${Number(sharedHexSize.toFixed(2))} px applied to all ${state.batch.length} PNGs. Other grid settings stayed unchanged.`;
+  });
+
+  splitVerticalButton.addEventListener('click', () => splitCurrentImage('vertical'));
+  splitHorizontalButton.addEventListener('click', () => splitCurrentImage('horizontal'));
+  splitFourButton.addEventListener('click', () => splitCurrentImage('four'));
 
   previousButton.addEventListener('click', () => activateImage(state.activeIndex - 1));
   nextButton.addEventListener('click', () => activateImage(state.activeIndex + 1));
