@@ -162,6 +162,8 @@
     state.filename = '';
     state.activeIndex = -1;
     canvas.style.display = 'none';
+    canvas.style.width = '';
+    canvas.style.height = '';
     if (context) context.clearRect(0, 0, canvas.width || 0, canvas.height || 0);
     dropZone.classList.remove('has-image');
     resizeHandle.hidden = true;
@@ -217,6 +219,23 @@
 
   function resizeAnchor() {
     return { x: state.offsetX, y: state.offsetY };
+  }
+
+  function fitCanvasToWorkspace() {
+    if (!state.image || canvas.style.display === 'none') return;
+
+    const naturalWidth = state.image.naturalWidth;
+    const naturalHeight = state.image.naturalHeight;
+    const availableWidth = Math.max(1, dropZone.clientWidth - 2);
+    const availableHeight = Math.max(1, dropZone.clientHeight - 2);
+    const scale = Math.min(
+      1,
+      availableWidth / naturalWidth,
+      availableHeight / naturalHeight
+    );
+
+    canvas.style.width = `${Math.max(1, Math.floor(naturalWidth * scale))}px`;
+    canvas.style.height = `${Math.max(1, Math.floor(naturalHeight * scale))}px`;
   }
 
   function positionResizeHandle() {
@@ -374,6 +393,7 @@
     context.clearRect(0, 0, width, height);
     context.drawImage(state.image, 0, 0);
     const spacing = drawGrid(context, width, height);
+    fitCanvasToWorkspace();
     appMessage.textContent = spacing > state.hexSize ? 'Ready · grid detail limited for image size' : 'Ready';
     positionResizeHandle();
   }
@@ -869,6 +889,19 @@
     const items = Array.from(dataTransfer.items || []);
     if (items.some((item) => item.kind === 'file' && item.type === 'image/png')) return true;
     return Array.from(dataTransfer.files || []).some(isPngFile);
+  }
+
+  const refitWorkspace = () => {
+    if (!state.image) return;
+    fitCanvasToWorkspace();
+    positionResizeHandle();
+  };
+
+  if ('ResizeObserver' in window) {
+    const workspaceObserver = new ResizeObserver(refitWorkspace);
+    workspaceObserver.observe(dropZone);
+  } else {
+    window.addEventListener('resize', refitWorkspace);
   }
 
   [dropZone, uploadDropTarget].forEach((target) => {
