@@ -7,7 +7,9 @@ Hex Grid Overlay is a static browser editor for adding pointy-top or flat-top he
 - Select or drop one or more PNGs.
 - Use Previous / Next or the image selector to move through the loaded batch.
 - Every PNG has its own independent grid size, position, color, opacity, line width, and orientation.
-- **Apply Current Grid to All** copies the active PNG's grid settings to every loaded PNG as a starting point. After that, each PNG can still be adjusted independently.
+- **Apply Current Grid to All** copies the active PNG's full grid settings to every loaded PNG as a starting point. After that, each PNG can still be adjusted independently.
+- **Set Hex Size for All PNGs** copies only the active PNG's current hex size to every loaded PNG and leaves their other settings unchanged.
+- **Split 2 Vertical**, **Split 2 Horizontal**, and **Split 4** create new batch PNGs from the active image. Split children inherit the current grid and adjust offsets so the grid remains aligned across cut edges.
 - **Export Current PNG** downloads only the active image.
 - **Export All ZIP** renders every loaded PNG with its own stored grid settings and downloads them together in one ZIP file.
 
